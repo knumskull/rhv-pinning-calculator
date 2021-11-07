@@ -308,10 +308,92 @@ class Host():
         self.__virtual_machines.append(VirtualMachine(sockets, cores, threads))
 
 
+
+
+def create_vm_pinning_string(vm_config):
+    """ 
+    
+    """
+    print(".. build numa map from hardware")
+
+
+    numa_map = {}
+    with open('examples/numa_hardware_4-node-with-ht.txt', 'r') as fb:
+        for line in fb:
+            if re.match("^node\s\d\scpus:.*", line):
+                pattern = '^node\s(\d)\scpus:\s(.*)$'
+                result = re.search(pattern, line)
+
+                node_id = result.group(1)
+                node_cpu_list = result.group(2).split()
+
+                # pprint.pprint("{}: {}".format(node_id, node_cpu_list))
+
+                # create two identical lists
+                tmp_list = list(chunks(node_cpu_list, int(len(node_cpu_list)/2)))
+
+                map = {
+                    node_id: {
+                        "cores": tmp_list[0],
+                        "threads": tmp_list[1]
+                    }
+                }
+
+                numa_map = {**numa_map, **map}
+
+
+    cpu_pinning_string = str()
+    string_separator = "_"
+    sockets = int(vm_config["sockets"])
+    amount_vcpu = int(vm_config["cores"])
+    tmp_pinning_string = list()
+
+    vcpu_per_numa_node = amount_vcpu // sockets
+
+    
+    current_numa_node = 0
+    cpu_pair_slot = 1 
+
+    # vcpu: 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15
+    # node: 0 0 0 0 1 1 1 1 2 2  2  2  3  3  3  3
+    # slot: 0 0 1 1 0 0 1 1 0 0  1  1  0  0  1  1
+
+    # 
+
+    for current_vcpu in range(0,amount_vcpu):
+        #  
+        # for current_numa_node in range(0,sockets):
+        # for current_numa_node in range(0,vcpu_per_numa_node):
+
+        # how to 
+        
+        
+        tmp_pinning_string.append("{vcpu}#{core},{thread}".format(vcpu=current_vcpu, core=numa_map[str(current_numa_node)]["cores"][cpu_pair_slot], thread=numa_map[str(current_numa_node)]["threads"][cpu_pair_slot]))
+
+        if (current_vcpu + 1) % 2 == 0:
+            if (current_vcpu + 1) == vcpu_per_numa_node * (current_numa_node + 1):
+                cpu_pair_slot = 1
+            else: 
+                cpu_pair_slot += 1
+        
+        if (current_vcpu + 1) % vcpu_per_numa_node == 0:
+            current_numa_node += 1        
+        
+        # print(tmp_pinning_string)
+        cpu_pinning_string = string_separator.join(tmp_pinning_string)
+
+
+
+    return cpu_pinning_string
+
+
 def main(vm_configurations):
     print("... calling main function ..")
     host = Host()
     host.initialize()
+
+
+ 
 
 
 if __name__ == '__main__':
