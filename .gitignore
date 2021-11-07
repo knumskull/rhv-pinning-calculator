@@ -1,0 +1,5 @@
+notes/*
+__pycache__/*
+launch.json
+settings.json
+**.pyc
