@@ -182,7 +182,7 @@ class Numa():
 
                 # create two identical lists
                 tmp_list = list(self.__chunks(cpu_list, int(len(cpu_list)/2)))
-                self.__numa_nodes[int(id)].cpus = {"cores": tmp_list[0], "threads": tmp_list[1]}
+                self.__numa_nodes[int(id)].cpus = {"cores": list(map(int, tmp_list[0])), "threads": list(map(int, tmp_list[1]))}
 
             if re.match(memory_max_pattern, line):
                 id, memory_max = re.search(memory_max_pattern, line).group(1, 2)
@@ -190,6 +190,65 @@ class Numa():
             if re.match(memory_free_pattern, line):
                 id, memory_free = re.search(memory_free_pattern, line).group(1, 2)
                 self.__numa_nodes[int(id)].memory = {"free": int(memory_free)}
+
+    def get_free_cores(self, vm) -> list:
+        """ 
+        
+        """
+        sockets = vm.sockets
+        cores = vm.cores
+        threads = vm.threads
+
+        if sockets > len(self.nodes):
+            """ the virtual machine architecture does not match host architecture """
+            raise IndexError
+        
+        tmp_list = list()
+        for i in range(0, sockets):
+            if threads > 1:
+                tmp_list.extend(self.nodes[i].cpus["cores"][1:cores+1])
+                tmp_list.extend(self.nodes[i].cpus["threads"][1:cores+1])
+            else:
+                raise NotImplementedError
+
+        return tmp_list
+
+    def pinning_string(self, vm) -> str:
+        """
+        
+        """
+        sockets = vm.sockets
+        cores = vm.cores
+        threads = vm.threads
+
+        amount_vcpus = sockets * cores * threads
+
+        if sockets > len(self.nodes):
+            """ the virtual machine architecture does not match host architecture """
+            raise IndexError
+
+        cores_list = list()
+        threads_list = list()
+        for i in range(0, sockets):
+            if threads > 1:
+                cores_list.extend(self.nodes[i].cpus["cores"][1:cores+1])
+                threads_list.extend(self.nodes[i].cpus["threads"][1:cores+1])
+            else:
+                raise NotImplementedError
+
+        cpu_pinning_string = str()
+        string_separator = "_"
+        tmp_pinning_string = list()
+
+        cpu_pair_slot = 0
+        for current_vcpu in range(0,amount_vcpus):
+            tmp_pinning_string.append("{vcpu}#{core},{thread}".format(vcpu=current_vcpu, core=cores_list[cpu_pair_slot], thread=threads_list[cpu_pair_slot]))
+
+            if (current_vcpu + 1) % 2 == 0:
+                cpu_pair_slot += 1
+                
+        cpu_pinning_string = string_separator.join(tmp_pinning_string)
+        return cpu_pinning_string
 
 
 class NumaNode():
@@ -233,15 +292,19 @@ class NumaNode():
 
 class VirtualMachine():
     def __init__(self, socket, cores, threads, memory=None) -> None:
-        self.__sockets = socket
-        self.__cores = cores
-        self.__threads = threads
+        self.__sockets = int(socket)
+        self.__cores = int(cores)
+        self.__threads = int(threads)
         self.__memory = memory
         self.__vcpus = self.__sockets * self.__cores * self.__threads
 
     @property
     def vcpus(self) -> int:
         return int(self.__vcpus)
+
+    @property
+    def cores(self) -> int:
+        return int(self.__cores)
     
     @property
     def sockets(self) -> int:
@@ -297,6 +360,10 @@ class Host():
     def ht_enabled(self) -> bool:
         return self.cpu.ht
 
+    @property
+    def virtual_machines(self) -> VirtualMachine:
+        return self.__virtual_machines
+
     def add_vm(self, config) -> None:
         """ will return a dictionary of vm-configuration
         
@@ -317,4 +384,3 @@ def main(vm_configurations):
 if __name__ == '__main__':
     print(" START numa-calculation ...")
     main(sys.argv[1:])
-
