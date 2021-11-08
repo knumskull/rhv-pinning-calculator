@@ -101,6 +101,35 @@ class TestHostFunctions(unittest.TestCase):
     def test_host_ht_enabled(self):
         self.assertTrue(self.host.ht_enabled)
 
+    def test_host_added_vm(self):
+        self.host.add_vm("4:18:2")
+        self.assertEqual(len(self.host.virtual_machines), 1)
+
+    def test_host_added_vm_architecture(self):
+        self.host.add_vm("4:18:2")
+        self.assertEqual(self.host.virtual_machines[0].sockets, 4)
+        self.assertEqual(self.host.virtual_machines[0].cores, 18)
+        self.assertEqual(self.host.virtual_machines[0].threads, 2)
+        self.assertEqual(self.host.virtual_machines[0].vcpus, 144)
+
+    def test_host_get_free_cores_for_vm(self):
+        self.host.add_vm("2:10:2")
+        expected_cores = [
+            2, 4, 6, 8, 10, 12, 14, 16, 18, 20,      # numa0 - cores
+            38, 40, 42, 44, 46, 48, 50, 52, 54, 56,  # numa0 - threads
+            3, 5, 7, 9, 11, 13, 15, 17, 19, 21,      # numa1 - cores
+            39, 41, 43, 45, 47, 49, 51, 53, 55, 57   # numa1 - threads
+        ]
+
+        vm = self.host.virtual_machines[0]
+        self.assertEqual(len(self.host.numa.get_free_cores(vm)), 40)
+        self.assertEqual(self.host.numa.get_free_cores(vm), expected_cores)
+
+    def test_host_vm_pinning_string(self):
+        self.host.add_vm("2:5:2")
+        expected_string = "0#2,38_1#2,38_2#4,40_3#4,40_4#6,42_5#6,42_6#8,44_7#8,44_8#10,46_9#10,46_10#3,39_11#3,39_12#5,41_13#5,41_14#7,43_15#7,43_16#9,45_17#9,45_18#11,47_19#11,47"
+        vm = self.host.virtual_machines[0]
+        self.assertEqual(self.host.numa.pinning_string(vm), expected_string)
 
 if __name__ == '__main__':
     unittest.main()
