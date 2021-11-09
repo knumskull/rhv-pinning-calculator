@@ -131,6 +131,19 @@ class TestHostFunctions(unittest.TestCase):
         vm = self.host.virtual_machines[0]
         self.assertEqual(self.host.numa.pinning_string(vm), expected_string)
 
+    def test_host_multiple_vm_pinning(self):
+        
+        self.host.add_vm("2:5:2") # vm_1
+        self.host.add_vm("2:4:2") # vm_2
+
+        expected_string_vm_1 = "0#2,38_1#2,38_2#4,40_3#4,40_4#6,42_5#6,42_6#8,44_7#8,44_8#10,46_9#10,46_10#3,39_11#3,39_12#5,41_13#5,41_14#7,43_15#7,43_16#9,45_17#9,45_18#11,47_19#11,47"
+        expected_string_vm_2 = "0#12,48_1#12,48_2#14,50_3#14,50_4#16,52_5#16,52_6#18,54_7#18,54_8#13,49_9#13,49_10#15,51_11#15,51_12#17,53_13#17,53_14#19,55_15#19,55"
+
+        vm_1 = self.host.virtual_machines[0]
+        vm_2 = self.host.virtual_machines[1]
+        self.assertEqual(self.host.numa.pinning_string(vm_1), expected_string_vm_1)
+        self.assertEqual(self.host.numa.pinning_string(vm_2), expected_string_vm_2)
+
 if __name__ == '__main__':
     unittest.main()
     

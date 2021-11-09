@@ -46,8 +46,8 @@ class Hardware():
 
     def gather_command_output(self):
         """ load command output """
-        self.lscpu_output = check_output(["lscpu"])
-        self.numactl_output = check_output(["numactl", "--hardware"])
+        self.lscpu_output = check_output(["lscpu"]).decode("utf-8")
+        self.numactl_output = check_output(["numactl", "--hardware"]).decode("utf-8")
 
 
 class Cpu():
@@ -121,17 +121,26 @@ class Cpu():
                     self.__ht = True 
 
 class Core():
-    def __init__(self) -> None:
-        self.__pinned = False
+    def __init__(self, id) -> None:
+        self.__id = int(id)
+        self.__virtual_machines = list()
 
-    def is_pinned(self) -> bool:
-        return self.__pinned
+    @property
+    def id(self) -> int:
+        return self.__id
 
-    def pin(self, pin) -> None:
-        self.__pinned = pin
+    def pin(self, vm) -> None:
+        self.__virtual_machines.append(vm) 
 
-    def status(self) -> dict:
-        pass 
+    def unpin(self, vm) -> None:
+        self.__virtual_machines.remove(vm)
+
+    def status(self) -> int:
+        """ return amount of VMs using this core """
+        return len(self.__virtual_machines)
+
+    def __str__(self) -> int:
+        return int(self.__id)
 
 class Numa():
 
@@ -149,12 +158,16 @@ class Numa():
         for i in range(0, len(lst), n):
             yield lst[i:i + n]
 
+    @staticmethod
+    def rotate(l, n):
+        return l[n:] + l[:n]
+
     def add_node(self, node) -> None:
         if isinstance(node, NumaNode):
             self.__numa_nodes.append(node)
         else:
             # todo - add proper exception type
-            raise BaseException
+            raise TypeError
 
     def update(self, numactl_output) -> None:
         """
@@ -180,9 +193,15 @@ class Numa():
                 id, cpus = re.search(node_cpu_pattern, line).group(1, 2)
                 cpu_list = cpus.split()
 
+                # all values are required to be integer
+                cpu_list = list(map(int, cpu_list))
+                # create Core-objects out of list-values 
+                for i in range(0, int(len(cpu_list))):
+                    cpu_list[i] = Core(id=cpu_list[i])
+
                 # create two identical lists
                 tmp_list = list(self.__chunks(cpu_list, int(len(cpu_list)/2)))
-                self.__numa_nodes[int(id)].cpus = {"cores": list(map(int, tmp_list[0])), "threads": list(map(int, tmp_list[1]))}
+                self.__numa_nodes[int(id)].cpus = {"cores": tmp_list[0], "threads": tmp_list[1]}
 
             if re.match(memory_max_pattern, line):
                 id, memory_max = re.search(memory_max_pattern, line).group(1, 2)
@@ -231,8 +250,17 @@ class Numa():
         threads_list = list()
         for i in range(0, sockets):
             if threads > 1:
-                cores_list.extend(self.nodes[i].cpus["cores"][1:cores+1])
-                threads_list.extend(self.nodes[i].cpus["threads"][1:cores+1])
+                # todo - refactor to pin VM to core and rotate cores accordingly
+                for core in self.nodes[i].cpus["cores"][1:cores+1]:
+                    core.pin(vm)
+                    cores_list.append(core.id)
+                for thread in self.nodes[i].cpus["threads"][1:cores+1]:
+                    thread.pin(vm)
+                    threads_list.append(thread.id)
+                # rotate lists by number of cores
+                self.nodes[i].cpus = {"cores": self.rotate(self.nodes[i].cpus["cores"], cores), \
+                    "threads": self.rotate(self.nodes[i].cpus["threads"], cores)}
+
             else:
                 raise NotImplementedError
 
@@ -376,11 +404,16 @@ class Host():
 
 
 def main(vm_configurations):
-    print("... calling main function ..")
     host = Host()
     host.initialize()
 
+    for config in vm_configurations:
+        host.add_vm(config)
+
+
+    for vm in host.virtual_machines:
+        print(host.numa.pinning_string(vm))
+
 
 if __name__ == '__main__':
-    print(" START numa-calculation ...")
     main(sys.argv[1:])
